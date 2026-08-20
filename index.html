@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BlueVault Games</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="glow glow-1"></div>
+  <div class="glow glow-2"></div>
+
+  <header class="topbar">
+    <a href="#" class="brand">
+      <span class="brand-icon">B</span>
+      <span>
+        <strong>BLUEVAULT</strong>
+        <small>GAMES</small>
+      </span>
+    </a>
+
+    <nav class="nav">
+      <a href="#inicio">Início</a>
+      <a href="#jogos">Jogos</a>
+      <a href="#ofertas">Ofertas</a>
+      <a href="#pagamento">Pagamento</a>
+    </nav>
+
+    <div class="header-actions">
+      <button class="icon-btn" id="searchBtn" aria-label="Pesquisar">⌕</button>
+      <button class="cart-btn" id="openCart">
+        Carrinho
+        <span id="cartCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" id="inicio">
+      <div class="hero-content reveal-left">
+        <span class="eyebrow">BIBLIOTECA DIGITAL • ENTREGA IMEDIATA</span>
+        <h1>SEU PRÓXIMO<br><span>JOGO COMEÇA AQUI.</span></h1>
+        <p>Escolha seus favoritos, monte seu carrinho e pague com cartão, PIX ou boleto. Comprando 5 ou mais itens, você pode parcelar em até 10x no cartão.</p>
+
+        <div class="hero-actions">
+          <a href="#jogos" class="primary-btn">Explorar jogos</a>
+          <a href="#pagamento" class="secondary-btn">Ver pagamentos</a>
+        </div>
+
+        <div class="hero-stats">
+          <div><strong>+1200</strong><span>Jogos</span></div>
+          <div><strong>24h</strong><span>Suporte</span></div>
+          <div><strong>100%</strong><span>Digital</span></div>
+        </div>
+      </div>
+
+      <div class="hero-showcase reveal-right">
+        <div class="showcase-panel active" data-slide="0">
+          <img class="hero-image" src="assets/god-of-war.jpg" alt="God of War">
+        </div>
+        <div class="showcase-panel" data-slide="1">
+          <img class="hero-image" src="assets/the-last-of-us.png" alt="The Last of Us">
+        </div>
+        <div class="showcase-panel" data-slide="2">
+          <img class="hero-image" src="assets/hollow-knight.jpg" alt="Hollow Knight">
+        </div>
+        <div class="showcase-panel" data-slide="3">
+          <img class="hero-image" src="assets/outlast.jpg" alt="Outlast">
+        </div>
+
+        <div class="carousel-controls">
+          <button id="prevSlide">←</button>
+          <div class="dots">
+            <button class="dot active" data-index="0"></button>
+            <button class="dot" data-index="1"></button>
+            <button class="dot" data-index="2"></button>
+            <button class="dot" data-index="3"></button>
+          </div>
+          <button id="nextSlide">→</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="ticker">
+      <span>ENTREGA DIGITAL</span>
+      <span>•</span>
+      <span>PIX</span>
+      <span>•</span>
+      <span>CARTÃO DE CRÉDITO</span>
+      <span>•</span>
+      <span>DÉBITO</span>
+      <span>•</span>
+      <span>BOLETO</span>
+      <span>•</span>
+      <span>ATÉ 10X EM COMPRAS COM 5+ ITENS</span>
+    </section>
+
+    <section class="catalog-section" id="jogos">
+      <div class="section-heading reveal-left">
+        <div>
+          <span class="eyebrow">CATÁLOGO</span>
+          <h2>Jogos em destaque</h2>
+        </div>
+        <div class="filters">
+          <button class="filter active" data-filter="all">Todos</button>
+          <button class="filter" data-filter="acao">Ação</button>
+          <button class="filter" data-filter="terror">Terror</button>
+          <button class="filter" data-filter="indie">Indie</button>
+        </div>
+      </div>
+
+      <div class="games-grid" id="gamesGrid"></div>
+    </section>
+
+    <section class="promo-section" id="ofertas">
+      <div class="promo reveal-left">
+        <span class="promo-badge">OFERTA ESPECIAL</span>
+        <h2>Monte sua biblioteca.</h2>
+        <p>Comprou 5 jogos ou mais? No cartão de crédito você poderá escolher parcelamento em até 10 vezes no checkout.</p>
+        <a href="#jogos" class="primary-btn">Escolher jogos</a>
+      </div>
+
+      <div class="promo visual reveal-right">
+        <div class="promo-orbit orbit-1"></div>
+        <div class="promo-orbit orbit-2"></div>
+        <div class="promo-center">10X</div>
+      </div>
+    </section>
+
+    <section class="payment-section" id="pagamento">
+      <div class="section-heading reveal-left">
+        <div>
+          <span class="eyebrow">PAGAMENTO</span>
+          <h2>Escolha como pagar</h2>
+        </div>
+      </div>
+
+      <div class="payment-cards">
+        <article class="payment-card reveal-left">
+          <div class="payment-icon">💳</div>
+          <h3>Crédito</h3>
+          <p>Pagamento seguro com cartão. Compras com 5 ou mais itens podem ser parceladas em até 10x.</p>
+        </article>
+
+        <article class="payment-card reveal-up">
+          <div class="payment-icon">◈</div>
+          <h3>PIX</h3>
+          <p>Pagamento rápido por QR Code ou código copia e cola.</p>
+        </article>
+
+        <article class="payment-card reveal-up">
+          <div class="payment-icon">▤</div>
+          <h3>Boleto</h3>
+          <p>Gere seu boleto e conclua o pagamento pelo seu banco.</p>
+        </article>
+
+        <article class="payment-card reveal-right">
+          <div class="payment-icon">▣</div>
+          <h3>Débito</h3>
+          <p>Pagamento à vista no cartão de débito.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="brand">
+      <span class="brand-icon">B</span>
+      <span><strong>BLUEVAULT</strong><small>GAMES</small></span>
+    </div>
+    <p>Projeto demonstrativo de loja digital. “Steam” e nomes de jogos pertencem aos seus respectivos proprietários.</p>
+  </footer>
+
+  <div class="overlay" id="overlay"></div>
+
+  <aside class="cart-drawer" id="cartDrawer">
+    <div class="drawer-head">
+      <div>
+        <span class="eyebrow">SEU PEDIDO</span>
+        <h2>Carrinho</h2>
+      </div>
+      <button class="close-btn" id="closeCart">×</button>
+    </div>
+
+    <div class="cart-items" id="cartItems"></div>
+
+    <div class="cart-empty" id="cartEmpty">
+      <span>🛒</span>
+      <h3>Seu carrinho está vazio</h3>
+      <p>Adicione alguns jogos para continuar.</p>
+    </div>
+
+    <div class="cart-summary">
+      <div><span>Itens</span><strong id="summaryItems">0</strong></div>
+      <div><span>Subtotal</span><strong id="subtotal">R$ 0,00</strong></div>
+      <div class="total"><span>Total</span><strong id="total">R$ 0,00</strong></div>
+      <button class="checkout-btn" id="checkoutBtn">Ir para pagamento</button>
+    </div>
+  </aside>
+
+  <div class="modal" id="checkoutModal">
+    <div class="checkout-box">
+      <button class="close-btn modal-close" id="closeCheckout">×</button>
+
+      <div class="checkout-left">
+        <span class="eyebrow">FINALIZAR COMPRA</span>
+        <h2>Pagamento</h2>
+
+        <div class="payment-tabs">
+          <button class="payment-tab active" data-method="credit">Crédito</button>
+          <button class="payment-tab" data-method="debit">Débito</button>
+          <button class="payment-tab" data-method="pix">PIX</button>
+          <button class="payment-tab" data-method="boleto">Boleto</button>
+        </div>
+
+        <div class="method-panel active" id="credit">
+          <label>Número do cartão
+            <input type="text" maxlength="19" placeholder="0000 0000 0000 0000" id="cardNumber">
+          </label>
+          <div class="split">
+            <label>Validade<input type="text" placeholder="MM/AA"></label>
+            <label>CVV<input type="text" maxlength="4" placeholder="000"></label>
+          </div>
+          <label>Nome no cartão<input type="text" placeholder="NOME COMPLETO"></label>
+          <label>Parcelas
+            <select id="installments"></select>
+          </label>
+          <small id="installmentHint"></small>
+        </div>
+
+        <div class="method-panel" id="debit">
+          <label>Número do cartão
+            <input type="text" maxlength="19" placeholder="0000 0000 0000 0000">
+          </label>
+          <div class="split">
+            <label>Validade<input type="text" placeholder="MM/AA"></label>
+            <label>CVV<input type="text" maxlength="4" placeholder="000"></label>
+          </div>
+          <p class="info-box">Pagamento à vista no cartão de débito.</p>
+        </div>
+
+        <div class="method-panel" id="pix">
+          <div class="qr-box">
+            <div class="fake-qr">
+              <span>PIX</span>
+            </div>
+            <div>
+              <h3>PIX</h3>
+              <p>Após confirmar, sua integração de pagamento poderá exibir aqui o QR Code real.</p>
+              <button class="copy-btn" type="button">Copiar código PIX</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="method-panel" id="boleto">
+          <div class="boleto-box">
+            <span class="barcode">|||| ||| |||||| || ||||| ||||</span>
+            <h3>Boleto bancário</h3>
+            <p>O boleto real deve ser gerado por um gateway de pagamento no servidor.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="checkout-right">
+        <span class="eyebrow">RESUMO</span>
+        <h3>Seu pedido</h3>
+        <div id="checkoutItems" class="checkout-items"></div>
+        <div class="checkout-total">
+          <span>Total</span>
+          <strong id="checkoutTotal">R$ 0,00</strong>
+        </div>
+        <button class="confirm-btn" id="confirmPayment">Confirmar pagamento</button>
+        <p class="secure-note">🔒 Demonstração visual. Para cobrar de verdade, conecte Mercado Pago, Stripe, PagSeguro ou outro gateway.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Jogo adicionado ao carrinho.</div>
+
+  <script src="script.js"></script>
+</body>
+</html>
