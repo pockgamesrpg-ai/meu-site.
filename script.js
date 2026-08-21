@@ -1571,11 +1571,7 @@ async function abrirPaymentBrick() {
 };
 
 
-           customization: {
-    paymentMethods: {
-        creditCard: "all"
-    }
-},
+           
 
 
             callbacks: {
