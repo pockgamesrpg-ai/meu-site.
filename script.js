@@ -1576,31 +1576,147 @@ async function abrirPaymentBrick() {
 
             callbacks: {
 
-                // ======================================
-                // BRICK PRONTO
-                // ======================================
+    onReady: () => {
 
-                onReady: () => {
+        console.log(
+            "✅ Payment Brick pronto"
+        );
 
-                    console.log(
-                        "✅ Payment Brick pronto"
-                    );
+        paymentMessage(
+            `
+                🔒 Pagamento protegido pelo
+                <strong>Mercado Pago</strong>.
 
-                    paymentMessage(
-                        `
-                            🔒 Pagamento protegido pelo
-                            <strong>Mercado Pago</strong>.
+                <br><br>
 
-                            <br>
+                Total:
+                <strong>
+                    ${money(totalOficial)}
+                </strong>
+            `
+        );
 
-                            Total:
-                            <strong>
-                                ${money(totalOficial)}
-                            </strong>
-                        `
-                    );
+    },
 
-                },
+    onSubmit: async ({
+        selectedPaymentMethod,
+        formData
+    }) => {
+
+        console.log(
+            "Método selecionado:",
+            selectedPaymentMethod
+        );
+
+        try {
+
+            paymentMessage(
+                `
+                    ⏳ Processando pagamento...
+
+                    <br><br>
+
+                    Não feche esta página.
+                `
+            );
+
+            const response =
+                await fetch(
+                    "/process_payment",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body: JSON.stringify({
+
+                            formData,
+
+                            cart: cart.map(
+                                item => ({
+                                    id: item.id,
+                                    qty: item.qty
+                                })
+                            )
+
+                        })
+                    }
+                );
+
+            const result =
+                await response.json();
+
+            console.log(
+                "Pagamento:",
+                result
+            );
+
+            if (!response.ok) {
+
+                throw new Error(
+                    result.error ||
+                    "Pagamento não concluído."
+                );
+
+            }
+
+            mostrarResultadoPagamento(
+                result
+            );
+
+            return result;
+
+        } catch (error) {
+
+            console.error(
+                error
+            );
+
+            paymentMessage(
+                `
+                    <strong>
+                        ❌ Não foi possível processar o pagamento.
+                    </strong>
+
+                    <br><br>
+
+                    ${error.message}
+                `,
+                "error"
+            );
+
+            throw error;
+
+        }
+
+    },
+
+    onError: error => {
+
+        console.error(
+            "Erro Payment Brick:",
+            error
+        );
+
+        paymentMessage(
+            `
+                <strong>
+                    ❌ Erro no Mercado Pago.
+                </strong>
+
+                <br><br>
+
+                Veja o Console para mais detalhes.
+            `,
+            "error"
+        );
+
+    }
+
+}
 
 
                 // ======================================
