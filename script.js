@@ -1443,26 +1443,139 @@ async function abrirPaymentBrick() {
         // CONFIGURAÇÃO DO PAYMENT BRICK
         // ==============================================
 
-        const settings = {
+       const settings = {
 
-            initialization: {
+    initialization: {
+        amount: Number(totalOficial)
+    },
 
-                amount:
-                    totalOficial
+    callbacks: {
 
-            },
+        onReady: () => {
+
+            console.log(
+                "✅ PAYMENT BRICK CARREGOU"
+            );
+
+            paymentMessage(
+                `
+                    ✅ Mercado Pago carregado.
+
+                    <br><br>
+
+                    Total:
+                    <strong>
+                        ${money(totalOficial)}
+                    </strong>
+                `
+            );
+
+        },
+
+        onSubmit: async ({
+            selectedPaymentMethod,
+            formData
+        }) => {
+
+            console.log(
+                "Método:",
+                selectedPaymentMethod
+            );
+
+            console.log(
+                "FormData:",
+                formData
+            );
+
+            const response =
+                await fetch(
+                    "/process_payment",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+
+                                formData,
+
+                                cart:
+                                    cart.map(
+                                        item => ({
+                                            id:
+                                                item.id,
+
+                                            qty:
+                                                item.qty
+                                        })
+                                    )
+
+                            })
+                    }
+                );
 
 
-            customization: {
+            const result =
+                await response.json();
 
-                paymentMethods: {
-    creditCard: "all",
-    debitCard: "all",
-    bankTransfer: ["pix"],
-    ticket: ["bolbradesco"]
-}
 
-            },
+            if (!response.ok) {
+
+                throw new Error(
+                    result.error ||
+                    "Erro ao processar pagamento."
+                );
+
+            }
+
+
+            mostrarResultadoPagamento(
+                result
+            );
+
+
+            return result;
+
+        },
+
+        onError: error => {
+
+            console.error(
+                "❌ ERRO REAL DO PAYMENT BRICK:"
+            );
+
+            console.error(
+                error
+            );
+
+            paymentMessage(
+                `
+                    ❌ Mercado Pago não conseguiu
+                    carregar o checkout.
+
+                    <br><br>
+
+                    Abra o Console para ver o erro.
+                `,
+                "error"
+            );
+
+        }
+
+    }
+
+};
+
+
+           customization: {
+    paymentMethods: {
+        creditCard: "all"
+    }
+},
 
 
             callbacks: {
