@@ -1,4 +1,3 @@
-javascript
 const express = require("express");
 const dotenv = require("dotenv");
 
@@ -11,7 +10,6 @@ dotenv.config();
 
 const app = express();
 
-
 // ========================================
 // CONFIGURAÇÕES
 // ========================================
@@ -21,7 +19,6 @@ const PORT = process.env.PORT || 3000;
 const PUBLIC_URL =
     process.env.RENDER_EXTERNAL_URL ||
     `http://localhost:${PORT}`;
-
 
 // ========================================
 // MIDDLEWARES
@@ -33,64 +30,51 @@ app.use(express.urlencoded({
     extended: true
 }));
 
-// Serve index.html, style.css, script.js, assets etc.
+// Permite acessar index.html, style.css,
+// script.js e a pasta assets
 app.use(express.static(__dirname));
 
-
 // ========================================
-// VERIFICA TOKEN MERCADO PAGO
+// VERIFICA TOKEN DO MERCADO PAGO
 // ========================================
 
 if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
-
     console.error("");
     console.error("❌ ERRO:");
-    console.error(
-        "Access Token do Mercado Pago não encontrado."
-    );
-
+    console.error("Access Token do Mercado Pago não encontrado.");
     console.error("");
     console.error(
         "Configure MERCADO_PAGO_ACCESS_TOKEN no Render."
     );
-
     console.error("");
 
     process.exit(1);
 }
 
-
 // ========================================
-// MERCADO PAGO
+// CONFIGURAÇÃO MERCADO PAGO
 // ========================================
 
 const client = new MercadoPagoConfig({
-
-    accessToken:
-        process.env.MERCADO_PAGO_ACCESS_TOKEN
-
+    accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN
 });
 
-const preference =
-    new Preference(client);
-
+const preference = new Preference(client);
 
 // ========================================
-// CATÁLOGO OFICIAL
+// CATÁLOGO OFICIAL BLUEVAULT
 // ========================================
 //
-// IMPORTANTE:
+// Estes são os preços OFICIAIS.
 //
-// Os preços abaixo são os preços que
-// realmente serão enviados ao Mercado Pago.
+// O servidor NÃO usa o preço enviado
+// pelo navegador.
 //
-// Mesmo que alguém altere o preço pelo
-// navegador, o servidor ignora o preço
-// enviado pelo frontend.
+// Isso impede alguém de alterar o preço
+// pelo DevTools.
 //
 
 const catalogo = {
-
     1: {
         title: "God of War",
         price: 29.99
@@ -330,939 +314,550 @@ const catalogo = {
         title: "Valheim",
         price: 19.99
     }
-
 };
 
-
 // ========================================
-// TESTE DO SERVIDOR
+// ROTA DE TESTE
 // ========================================
 
-app.get(
-    "/teste",
-    (req, res) => {
-
-        res.json({
-
-            servidor:
-                "online",
-
-            loja:
-                "BlueVault Games",
-
-            mercadoPago:
-                "configurado",
-
-            webhook:
-                `${PUBLIC_URL}/webhook`
-
-        });
-
-    }
-);
-
+app.get("/teste", (req, res) => {
+    res.json({
+        servidor: "online",
+        loja: "BlueVault Games",
+        mercadoPago: "configurado",
+        url: PUBLIC_URL,
+        webhook: `${PUBLIC_URL}/webhook`
+    });
+});
 
 // ========================================
 // CRIAR PAGAMENTO
 // ========================================
 
-app.post(
-    "/criar-preferencia",
-    async (req, res) => {
+app.post("/criar-preferencia", async (req, res) => {
+    try {
+        console.log("");
+        console.log("=================================");
+        console.log("🛒 NOVO PEDIDO RECEBIDO");
+        console.log("=================================");
 
-        try {
+        const { items } = req.body;
 
-            console.log("");
-            console.log(
-                "================================="
-            );
+        // ========================================
+        // VERIFICA CARRINHO
+        // ========================================
 
-            console.log(
-                "🛒 NOVO PEDIDO RECEBIDO"
-            );
+        if (
+            !items ||
+            !Array.isArray(items) ||
+            items.length === 0
+        ) {
+            return res.status(400).json({
+                error: "Carrinho vazio."
+            });
+        }
 
-            console.log(
-                "================================="
-            );
+        // ========================================
+        // MONTA OS PRODUTOS
+        // ========================================
 
+        const produtos = items.map((item) => {
+            const produtoOficial = catalogo[item.id];
 
-            const {
-                items
-            } = req.body;
-
-
-            // =================================
-            // VERIFICA CARRINHO
-            // =================================
-
-            if (
-                !items ||
-                !Array.isArray(items) ||
-                items.length === 0
-            ) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Carrinho vazio."
-
-                    });
-
+            if (!produtoOficial) {
+                throw new Error(
+                    `Produto inválido: ${item.id}`
+                );
             }
 
+            const quantidade = Number(item.qty);
 
-            // =================================
-            // CRIA PRODUTOS USANDO
-            // PREÇO OFICIAL DO SERVIDOR
-            // =================================
-
-            const produtos =
-                items.map(item => {
-
-                    const produtoOficial =
-                        catalogo[item.id];
-
-
-                    // Produto inexistente
-                    if (!produtoOficial) {
-
-                        throw new Error(
-                            `Produto inválido: ${item.id}`
-                        );
-
-                    }
-
-
-                    const quantidade =
-                        Number(item.qty);
-
-
-                    // Proteção contra quantidade inválida
-                    if (
-                        !Number.isInteger(quantidade) ||
-                        quantidade <= 0 ||
-                        quantidade > 20
-                    ) {
-
-                        throw new Error(
-                            `Quantidade inválida para o produto ${item.id}`
-                        );
-
-                    }
-
-
-                    return {
-
-                        id:
-                            String(item.id),
-
-                        title:
-                            produtoOficial.title,
-
-                        quantity:
-                            quantidade,
-
-                        unit_price:
-                            produtoOficial.price,
-
-                        currency_id:
-                            "BRL"
-
-                    };
-
-                });
-
-
-            // =================================
-            // MOSTRA PEDIDO NO LOG
-            // =================================
-
-            console.log(
-                "Produtos:"
-            );
-
-            console.log(
-                produtos
-            );
-
-
-            const total =
-                produtos.reduce(
-                    (soma, produto) => {
-
-                        return (
-                            soma +
-                            (
-                                produto.unit_price *
-                                produto.quantity
-                            )
-                        );
-
-                    },
-                    0
+            if (
+                !Number.isInteger(quantidade) ||
+                quantidade <= 0 ||
+                quantidade > 20
+            ) {
+                throw new Error(
+                    `Quantidade inválida para o produto ${item.id}`
                 );
+            }
 
+            return {
+                id: String(item.id),
+                title: produtoOficial.title,
+                quantity: quantidade,
+                unit_price: produtoOficial.price,
+                currency_id: "BRL"
+            };
+        });
 
-            console.log(
-                `Total: R$ ${total.toFixed(2)}`
-            );
+        // ========================================
+        // CALCULA TOTAL
+        // ========================================
 
+        const total = produtos.reduce(
+            (soma, produto) => {
+                return (
+                    soma +
+                    produto.unit_price *
+                    produto.quantity
+                );
+            },
+            0
+        );
 
-            // =================================
-            // CRIA PREFERÊNCIA MERCADO PAGO
-            // =================================
+        console.log("Produtos:");
+        console.log(produtos);
 
-            const resultado =
-                await preference.create({
+        console.log(
+            `💰 Total: R$ ${total.toFixed(2)}`
+        );
 
-                    body: {
+        // ========================================
+        // CRIA CHECKOUT MERCADO PAGO
+        // ========================================
 
-                        items:
-                            produtos,
+        const resultado = await preference.create({
+            body: {
+                items: produtos,
 
+                back_urls: {
+                    success:
+                        `${PUBLIC_URL}/pagamento-sucesso`,
 
-                        // =====================
-                        // PÁGINAS DE RETORNO
-                        // =====================
+                    failure:
+                        `${PUBLIC_URL}/pagamento-erro`,
 
-                        back_urls: {
+                    pending:
+                        `${PUBLIC_URL}/pagamento-pendente`
+                },
 
-                            success:
-                                `${PUBLIC_URL}/pagamento-sucesso`,
+                auto_return: "approved",
 
-                            failure:
-                                `${PUBLIC_URL}/pagamento-erro`,
+                notification_url:
+                    `${PUBLIC_URL}/webhook`,
 
-                            pending:
-                                `${PUBLIC_URL}/pagamento-pendente`
+                statement_descriptor:
+                    "BLUEVAULT"
+            }
+        });
 
-                        },
+        console.log("");
+        console.log("✅ PAGAMENTO CRIADO");
+        console.log("Preference ID:", resultado.id);
+        console.log(
+            `💰 Valor: R$ ${total.toFixed(2)}`
+        );
 
+        // ========================================
+        // RETORNA CHECKOUT PARA O SITE
+        // ========================================
 
-                        // Retorna automaticamente
-                        // para o site se aprovado
-                        auto_return:
-                            "approved",
+        return res.json({
+            preferenceId: resultado.id,
 
+            initPoint:
+                resultado.init_point,
 
-                        // =====================
-                        // WEBHOOK
-                        // =====================
+            sandboxInitPoint:
+                resultado.sandbox_init_point,
 
-                        notification_url:
-                            `${PUBLIC_URL}/webhook`,
+            total:
+                Number(total.toFixed(2))
+        });
 
+    } catch (erro) {
+        console.error("");
+        console.error("❌ ERRO MERCADO PAGO:");
+        console.error(erro);
 
-                        // =====================
-                        // IDENTIFICAÇÃO
-                        // =====================
-
-                        statement_descriptor:
-                            "BLUEVAULT"
-
-                    }
-
-                });
-
-
-            console.log("");
-            console.log(
-                "✅ PREFERÊNCIA CRIADA"
-            );
-
-            console.log(
-                "ID:",
-                resultado.id
-            );
-
-
-            // =================================
-            // ENVIA PARA O FRONTEND
-            // =================================
-
-            res.json({
-
-                preferenceId:
-                    resultado.id,
-
-                initPoint:
-                    resultado.init_point,
-
-                sandboxInitPoint:
-                    resultado.sandbox_init_point,
-
-                total:
-                    Number(
-                        total.toFixed(2)
-                    )
-
-            });
-
-        }
-
-        catch (erro) {
-
-            console.error("");
-            console.error(
-                "❌ ERRO MERCADO PAGO"
-            );
-
-            console.error(
-                erro
-            );
-
-
-            res
-                .status(500)
-                .json({
-
-                    error:
-                        "Erro ao criar pagamento.",
-
-                    details:
-                        erro.message
-
-                });
-
-        }
-
+        return res.status(500).json({
+            error: "Erro ao criar pagamento.",
+            details: erro.message
+        });
     }
-);
-
+});
 
 // ========================================
 // WEBHOOK MERCADO PAGO
 // ========================================
 
-app.post(
-    "/webhook",
-    async (req, res) => {
+app.post("/webhook", async (req, res) => {
+    // Responde rapidamente ao Mercado Pago
+    res.sendStatus(200);
 
-        /*
-            O Mercado Pago precisa receber
-            resposta rapidamente.
+    try {
+        console.log("");
+        console.log("=================================");
+        console.log("🔔 WEBHOOK MERCADO PAGO");
+        console.log("=================================");
 
-            Então enviamos HTTP 200 primeiro.
-        */
+        console.log("BODY:");
+        console.log(
+            JSON.stringify(req.body, null, 2)
+        );
 
-        res.sendStatus(200);
+        console.log("QUERY:");
+        console.log(req.query);
 
+        console.log("X-SIGNATURE:");
+        console.log(
+            req.headers["x-signature"] ||
+            "não enviado"
+        );
 
-        try {
+        console.log("X-REQUEST-ID:");
+        console.log(
+            req.headers["x-request-id"] ||
+            "não enviado"
+        );
 
-            console.log("");
+        const paymentId =
+            req.body?.data?.id ||
+            req.query?.id ||
+            req.query?.["data.id"];
+
+        if (paymentId) {
             console.log(
-                "================================="
+                "💳 ID DO PAGAMENTO:",
+                paymentId
             );
-
-            console.log(
-                "🔔 WEBHOOK RECEBIDO"
-            );
-
-            console.log(
-                "================================="
-            );
-
-
-            console.log(
-                "BODY:"
-            );
-
-            console.log(
-                JSON.stringify(
-                    req.body,
-                    null,
-                    2
-                )
-            );
-
-
-            console.log("");
-            console.log(
-                "QUERY:"
-            );
-
-            console.log(
-                req.query
-            );
-
-
-            console.log("");
-            console.log(
-                "X-SIGNATURE:"
-            );
-
-            console.log(
-
-                req.headers[
-                    "x-signature"
-                ] ||
-
-                "não enviado"
-
-            );
-
-
-            console.log("");
-            console.log(
-                "X-REQUEST-ID:"
-            );
-
-            console.log(
-
-                req.headers[
-                    "x-request-id"
-                ] ||
-
-                "não enviado"
-
-            );
-
-
-            // =================================
-            // PEGA ID DO PAGAMENTO
-            // =================================
-
-            const paymentId =
-
-                req.body?.data?.id ||
-
-                req.query?.id ||
-
-                req.query?.[
-                    "data.id"
-                ];
-
-
-            if (paymentId) {
-
-                console.log("");
-                console.log(
-                    "💳 ID DO PAGAMENTO:"
-                );
-
-                console.log(
-                    paymentId
-                );
-
-            }
-
-
-            console.log(
-                "================================="
-            );
-
-            console.log("");
-
         }
 
-        catch (erro) {
+        console.log("=================================");
+        console.log("");
 
-            console.error(
-                "Erro no webhook:"
-            );
-
-            console.error(
-                erro
-            );
-
-        }
-
+    } catch (erro) {
+        console.error(
+            "❌ Erro no webhook:",
+            erro
+        );
     }
-);
-
+});
 
 // ========================================
-// TESTE GET DO WEBHOOK
+// TESTE DO WEBHOOK
 // ========================================
 
-app.get(
-    "/webhook",
-    (req, res) => {
-
-        res.send(`
+app.get("/webhook", (req, res) => {
+    res.send(`
 <!DOCTYPE html>
-
 <html lang="pt-BR">
 
 <head>
+    <meta charset="UTF-8">
 
-<meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>
-Webhook BlueVault
-</title>
-
+    <title>Webhook BlueVault</title>
 </head>
 
-<body
-style="
-margin:0;
-background:#030814;
-color:white;
-font-family:Arial;
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
-text-align:center;
-"
->
+<body style="
+    margin:0;
+    background:#030814;
+    color:white;
+    font-family:Arial;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    text-align:center;
+">
 
-<div>
+    <div>
+        <h1 style="color:#18a8ff;">
+            Webhook BlueVault
+        </h1>
 
-<h1
-style="
-color:#18a8ff;
-"
->
+        <p>
+            ✅ A rota /webhook está funcionando.
+        </p>
 
-Webhook BlueVault
+        <p>
+            O Mercado Pago pode enviar
+            notificações para esta URL.
+        </p>
 
-</h1>
-
-<p>
-
-✅ A rota /webhook está funcionando.
-
-</p>
-
-<p>
-
-O Mercado Pago deve enviar
-requisições POST para esta URL.
-
-</p>
-
-</div>
+        <a
+            href="/"
+            style="
+                color:#18a8ff;
+                text-decoration:none;
+            "
+        >
+            Voltar para BlueVault
+        </a>
+    </div>
 
 </body>
-
 </html>
-        `);
-
-    }
-);
-
+    `);
+});
 
 // ========================================
 // PAGAMENTO APROVADO
 // ========================================
 
-app.get(
-    "/pagamento-sucesso",
-    (req, res) => {
+app.get("/pagamento-sucesso", (req, res) => {
+    console.log("");
+    console.log("✅ PAGAMENTO APROVADO");
+    console.log(req.query);
 
-        console.log("");
-        console.log(
-            "✅ PAGAMENTO APROVADO"
-        );
-
-        console.log(
-            req.query
-        );
-
-
-        res.send(`
+    res.send(`
 <!DOCTYPE html>
-
 <html lang="pt-BR">
 
 <head>
+    <meta charset="UTF-8">
 
-<meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>
-Pagamento aprovado
-</title>
-
+    <title>Pagamento aprovado</title>
 </head>
 
-<body
-style="
-margin:0;
-background:
-linear-gradient(
-135deg,
-#020711,
-#071b30
-);
-color:white;
-font-family:Arial,sans-serif;
-display:flex;
-align-items:center;
-justify-content:center;
-height:100vh;
-text-align:center;
-"
->
+<body style="
+    margin:0;
+    background:linear-gradient(
+        135deg,
+        #020711,
+        #071b30
+    );
+    color:white;
+    font-family:Arial,sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    text-align:center;
+">
 
-<div>
+    <div>
 
-<div
-style="
-font-size:70px;
-margin-bottom:20px;
-"
->
+        <div style="
+            font-size:70px;
+            margin-bottom:20px;
+        ">
+            ✅
+        </div>
 
-✅
+        <h1 style="
+            color:#18a8ff;
+            font-size:40px;
+        ">
+            Pagamento aprovado!
+        </h1>
 
-</div>
+        <p style="
+            color:#9bb4cc;
+            font-size:17px;
+        ">
+            Sua compra foi recebida com sucesso.
+        </p>
 
-<h1
-style="
-color:#18a8ff;
-font-size:40px;
-"
->
+        <a
+            href="/"
+            style="
+                display:inline-block;
+                margin-top:25px;
+                padding:15px 30px;
+                background:linear-gradient(
+                    135deg,
+                    #18a8ff,
+                    #0068ff
+                );
+                color:white;
+                text-decoration:none;
+                border-radius:12px;
+                font-weight:bold;
+            "
+        >
+            Voltar para BlueVault
+        </a>
 
-Pagamento aprovado!
-
-</h1>
-
-<p
-style="
-color:#9bb4cc;
-font-size:17px;
-"
->
-
-Sua compra foi recebida
-com sucesso.
-
-</p>
-
-<a
-href="/"
-style="
-display:inline-block;
-margin-top:25px;
-padding:15px 30px;
-background:
-linear-gradient(
-135deg,
-#18a8ff,
-#0068ff
-);
-color:white;
-text-decoration:none;
-border-radius:12px;
-font-weight:bold;
-"
->
-
-Voltar para BlueVault
-
-</a>
-
-</div>
+    </div>
 
 </body>
-
 </html>
-        `);
-
-    }
-);
-
+    `);
+});
 
 // ========================================
 // PAGAMENTO PENDENTE
 // ========================================
 
-app.get(
-    "/pagamento-pendente",
-    (req, res) => {
+app.get("/pagamento-pendente", (req, res) => {
+    console.log("");
+    console.log("⏳ PAGAMENTO PENDENTE");
+    console.log(req.query);
 
-        console.log("");
-        console.log(
-            "⏳ PAGAMENTO PENDENTE"
-        );
-
-        console.log(
-            req.query
-        );
-
-
-        res.send(`
+    res.send(`
 <!DOCTYPE html>
-
 <html lang="pt-BR">
 
 <head>
+    <meta charset="UTF-8">
 
-<meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>
-Pagamento pendente
-</title>
-
+    <title>Pagamento pendente</title>
 </head>
 
-<body
-style="
-margin:0;
-background:#030814;
-color:white;
-font-family:Arial;
-display:flex;
-align-items:center;
-justify-content:center;
-height:100vh;
-text-align:center;
-"
->
+<body style="
+    margin:0;
+    background:#030814;
+    color:white;
+    font-family:Arial;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    text-align:center;
+">
 
-<div>
+    <div>
 
-<div
-style="
-font-size:70px;
-"
->
+        <div style="font-size:70px;">
+            ⏳
+        </div>
 
-⏳
+        <h1 style="color:#ffd84d;">
+            Pagamento pendente
+        </h1>
 
-</div>
+        <p style="color:#9bb4cc;">
+            Estamos aguardando a confirmação
+            do pagamento.
+        </p>
 
-<h1
-style="
-color:#ffd84d;
-"
->
+        <a
+            href="/"
+            style="
+                display:inline-block;
+                margin-top:20px;
+                padding:15px 25px;
+                background:#18a8ff;
+                color:white;
+                text-decoration:none;
+                border-radius:10px;
+            "
+        >
+            Voltar para a loja
+        </a>
 
-Pagamento pendente
-
-</h1>
-
-<p
-style="
-color:#9bb4cc;
-"
->
-
-Estamos aguardando
-a confirmação do pagamento.
-
-</p>
-
-<a
-href="/"
-style="
-display:inline-block;
-margin-top:20px;
-padding:15px 25px;
-background:#18a8ff;
-color:white;
-text-decoration:none;
-border-radius:10px;
-"
->
-
-Voltar para a loja
-
-</a>
-
-</div>
+    </div>
 
 </body>
-
 </html>
-        `);
-
-    }
-);
-
+    `);
+});
 
 // ========================================
 // PAGAMENTO NÃO CONCLUÍDO
 // ========================================
 
-app.get(
-    "/pagamento-erro",
-    (req, res) => {
+app.get("/pagamento-erro", (req, res) => {
+    console.log("");
+    console.log("❌ PAGAMENTO NÃO CONCLUÍDO");
+    console.log(req.query);
 
-        console.log("");
-        console.log(
-            "❌ PAGAMENTO NÃO CONCLUÍDO"
-        );
-
-        console.log(
-            req.query
-        );
-
-
-        res.send(`
+    res.send(`
 <!DOCTYPE html>
-
 <html lang="pt-BR">
 
 <head>
+    <meta charset="UTF-8">
 
-<meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>
-Pagamento não concluído
-</title>
-
+    <title>Pagamento não concluído</title>
 </head>
 
-<body
-style="
-margin:0;
-background:#030814;
-color:white;
-font-family:Arial;
-display:flex;
-align-items:center;
-justify-content:center;
-height:100vh;
-text-align:center;
-"
->
+<body style="
+    margin:0;
+    background:#030814;
+    color:white;
+    font-family:Arial;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    text-align:center;
+">
 
-<div>
+    <div>
 
-<div
-style="
-font-size:70px;
-"
->
+        <div style="font-size:70px;">
+            ❌
+        </div>
 
-❌
+        <h1 style="color:#ff4c6a;">
+            Pagamento não concluído
+        </h1>
 
-</div>
+        <p style="color:#9bb4cc;">
+            Tente novamente ou escolha
+            outra forma de pagamento.
+        </p>
 
-<h1
-style="
-color:#ff4c6a;
-"
->
+        <a
+            href="/"
+            style="
+                display:inline-block;
+                margin-top:20px;
+                padding:15px 25px;
+                background:#18a8ff;
+                color:white;
+                text-decoration:none;
+                border-radius:10px;
+            "
+        >
+            Voltar para a loja
+        </a>
 
-Pagamento não concluído
-
-</h1>
-
-<p
-style="
-color:#9bb4cc;
-"
->
-
-Tente novamente
-ou escolha outra
-forma de pagamento.
-
-</p>
-
-<a
-href="/"
-style="
-display:inline-block;
-margin-top:20px;
-padding:15px 25px;
-background:#18a8ff;
-color:white;
-text-decoration:none;
-border-radius:10px;
-"
->
-
-Voltar para a loja
-
-</a>
-
-</div>
+    </div>
 
 </body>
-
 </html>
-        `);
-
-    }
-);
-
+    `);
+});
 
 // ========================================
 // INICIA SERVIDOR
 // ========================================
 
-app.listen(
-    PORT,
-    () => {
+app.listen(PORT, () => {
+    console.log("");
+    console.log("=================================");
+    console.log("🎮 BLUEVAULT GAMES");
+    console.log("=================================");
+    console.log("");
 
-        console.log("");
-        console.log(
-            "================================="
-        );
+    console.log("✅ Servidor iniciado");
+    console.log(`📡 Porta: ${PORT}`);
 
-        console.log(
-            "🎮 BLUEVAULT GAMES"
-        );
+    console.log("");
+    console.log("🌐 URL:");
+    console.log(PUBLIC_URL);
 
-        console.log(
-            "================================="
-        );
+    console.log("");
+    console.log("🔔 Webhook:");
+    console.log(`${PUBLIC_URL}/webhook`);
 
-        console.log("");
+    console.log("");
+    console.log("💳 Mercado Pago configurado");
 
-        console.log(
-            "✅ Servidor iniciado"
-        );
-
-        console.log(
-            `Porta: ${PORT}`
-        );
-
-        console.log("");
-
-        console.log(
-            "🌐 URL:"
-        );
-
-        console.log(
-            PUBLIC_URL
-        );
-
-        console.log("");
-
-        console.log(
-            "🔔 Webhook:"
-        );
-
-        console.log(
-            `${PUBLIC_URL}/webhook`
-        );
-
-        console.log("");
-
-        console.log(
-            "================================="
-        );
-
-    }
-);
-```
+    console.log("");
+    console.log("=================================");
+});
