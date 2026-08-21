@@ -1456,20 +1456,11 @@ async function abrirPaymentBrick() {
             customization: {
 
                 paymentMethods: {
-
-                    creditCard:
-                        "all",
-
-                    debitCard:
-                        "all",
-
-                    bankTransfer:
-                        "all",
-
-                    ticket:
-                        "all"
-
-                }
+    creditCard: "all",
+    debitCard: "all",
+    bankTransfer: ["pix"],
+    ticket: ["bolbradesco"]
+}
 
             },
 
