@@ -1,5 +1,12 @@
+// ==========================================================
+// BLUEVAULT GAMES - SERVER.JS
+// Node.js + Express + Mercado Pago Payment Brick
+// ==========================================================
+
+require("dotenv").config();
+
 const express = require("express");
-const dotenv = require("dotenv");
+const path = require("path");
 const crypto = require("crypto");
 
 const {
@@ -7,82 +14,92 @@ const {
     Payment
 } = require("mercadopago");
 
-dotenv.config();
+
+// ==========================================================
+// APP
+// ==========================================================
 
 const app = express();
 
-// ======================================================
-// CONFIGURAÇÕES
-// ======================================================
-
 const PORT = process.env.PORT || 3000;
 
-const PUBLIC_URL =
-    process.env.RENDER_EXTERNAL_URL ||
-    `http://localhost:${PORT}`;
 
-// ======================================================
-// MIDDLEWARES
-// ======================================================
+// ==========================================================
+// VARIÁVEIS DE AMBIENTE
+// ==========================================================
 
-app.use(express.json());
+const ACCESS_TOKEN =
+    process.env.MERCADO_PAGO_ACCESS_TOKEN;
 
-app.use(express.urlencoded({
-    extended: true
-}));
+const PUBLIC_KEY =
+    process.env.MERCADO_PAGO_PUBLIC_KEY;
 
-app.use(express.static(__dirname));
 
-// ======================================================
+// ==========================================================
 // VERIFICA CREDENCIAIS
-// ======================================================
+// ==========================================================
 
-if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
-
+if (!ACCESS_TOKEN) {
     console.error(
         "❌ MERCADO_PAGO_ACCESS_TOKEN não configurado."
     );
-
-    process.exit(1);
 }
 
-if (!process.env.MERCADO_PAGO_PUBLIC_KEY) {
-
+if (!PUBLIC_KEY) {
     console.error(
         "❌ MERCADO_PAGO_PUBLIC_KEY não configurada."
     );
-
-    process.exit(1);
 }
 
-// ======================================================
+
+// ==========================================================
 // MERCADO PAGO
-// ======================================================
+// ==========================================================
 
-const client = new MercadoPagoConfig({
+const mercadoPagoClient = ACCESS_TOKEN
+    ? new MercadoPagoConfig({
+        accessToken: ACCESS_TOKEN
+    })
+    : null;
 
-    accessToken:
-        process.env.MERCADO_PAGO_ACCESS_TOKEN,
+const paymentClient = mercadoPagoClient
+    ? new Payment(mercadoPagoClient)
+    : null;
 
-    options: {
-        timeout: 5000
-    }
 
-});
+// ==========================================================
+// MIDDLEWARES
+// ==========================================================
 
-const payment = new Payment(client);
+app.use(express.json());
 
-// ======================================================
-// CATÁLOGO OFICIAL BLUEVAULT
-// ======================================================
+app.use(
+    express.urlencoded({
+        extended: true
+    })
+);
+
+
+// ==========================================================
+// ARQUIVOS DO SITE
+// ==========================================================
+
+app.use(
+    express.static(
+        path.join(__dirname)
+    )
+);
+
+
+// ==========================================================
+// CATÁLOGO OFICIAL
 //
-// O preço REAL vem daqui.
-//
-// NÃO usamos transaction_amount enviado
-// pelo navegador para determinar o valor.
-//
+// IMPORTANTE:
+// O servidor usa estes preços.
+// O navegador NÃO decide o valor final.
+// ==========================================================
 
-const catalogo = {
+const CATALOGO = {
 
     1: {
         title: "God of War",
@@ -326,61 +343,78 @@ const catalogo = {
 
 };
 
-// ======================================================
-// CALCULAR CARRINHO NO SERVIDOR
-// ======================================================
+
+// ==========================================================
+// CALCULAR CARRINHO
+// ==========================================================
 
 function calcularCarrinho(cart) {
 
-    if (
-        !Array.isArray(cart) ||
-        cart.length === 0
-    ) {
+    if (!Array.isArray(cart)) {
+        throw new Error(
+            "Carrinho inválido."
+        );
+    }
 
+    if (cart.length === 0) {
         throw new Error(
             "Carrinho vazio."
         );
     }
 
+    let total = 0;
+
     const produtos = [];
 
-    let total = 0;
 
     for (const item of cart) {
 
-        const produto =
-            catalogo[Number(item.id)];
+        const id =
+            Number(item.id);
 
-        if (!produto) {
+        const qty =
+            Number(item.qty);
 
+
+        if (
+            !Number.isInteger(id) ||
+            !CATALOGO[id]
+        ) {
             throw new Error(
                 `Produto inválido: ${item.id}`
             );
         }
 
-        const quantidade =
-            Number(item.qty);
 
         if (
-            !Number.isInteger(quantidade) ||
-            quantidade < 1 ||
-            quantidade > 20
+            !Number.isInteger(qty) ||
+            qty < 1 ||
+            qty > 10
         ) {
-
             throw new Error(
-                `Quantidade inválida: ${item.id}`
+                `Quantidade inválida para ${CATALOGO[id].title}.`
             );
         }
 
+
+        const produto =
+            CATALOGO[id];
+
         const subtotal =
-            produto.price *
-            quantidade;
+            Number(
+                (
+                    produto.price *
+                    qty
+                ).toFixed(2)
+            );
+
 
         total += subtotal;
 
+
         produtos.push({
 
-            id: Number(item.id),
+            id,
 
             title:
                 produto.title,
@@ -388,57 +422,91 @@ function calcularCarrinho(cart) {
             price:
                 produto.price,
 
-            qty:
-                quantidade,
+            qty,
 
-            subtotal:
-                Number(
-                    subtotal.toFixed(2)
-                )
+            subtotal
 
         });
 
     }
 
+
+    total =
+        Number(
+            total.toFixed(2)
+        );
+
+
     return {
-
-        produtos,
-
-        total:
-            Number(
-                total.toFixed(2)
-            )
-
+        total,
+        produtos
     };
 
 }
 
-// ======================================================
-// PUBLIC KEY
-// ======================================================
-//
-// O navegador pode conhecer a Public Key.
-// O Access Token NUNCA é enviado.
-//
+
+// ==========================================================
+// TESTE DO SERVIDOR
+// ==========================================================
 
 app.get(
-    "/api/mercadopago/public-key",
+    "/api/status",
     (req, res) => {
 
         res.json({
 
-            publicKey:
-                process.env
-                    .MERCADO_PAGO_PUBLIC_KEY
+            online: true,
+
+            mercadoPago:
+                Boolean(
+                    ACCESS_TOKEN &&
+                    PUBLIC_KEY
+                )
 
         });
 
     }
 );
 
-// ======================================================
-// CONSULTAR TOTAL REAL
-// ======================================================
+
+// ==========================================================
+// PUBLIC KEY DO MERCADO PAGO
+//
+// ESSA É A ROTA QUE ESTAVA DANDO "NOT FOUND"
+// ==========================================================
+
+app.get(
+    "/api/mercadopago/public-key",
+    (req, res) => {
+
+        if (!PUBLIC_KEY) {
+
+            return res
+                .status(500)
+                .json({
+
+                    error:
+                        "MERCADO_PAGO_PUBLIC_KEY não configurada."
+
+                });
+
+        }
+
+
+        return res.json({
+
+            publicKey:
+                PUBLIC_KEY
+
+        });
+
+    }
+);
+
+
+// ==========================================================
+// CALCULAR TOTAL OFICIAL
+// ==========================================================
 
 app.post(
     "/api/carrinho",
@@ -451,18 +519,27 @@ app.post(
                     req.body.cart
                 );
 
-            res.json(resultado);
+
+            return res.json(
+                resultado
+            );
 
         }
 
-        catch (erro) {
+        catch (error) {
 
-            res
+            console.error(
+                "❌ Erro no carrinho:",
+                error.message
+            );
+
+
+            return res
                 .status(400)
                 .json({
 
                     error:
-                        erro.message
+                        error.message
 
                 });
 
@@ -471,12 +548,10 @@ app.post(
     }
 );
 
-// ======================================================
+
+// ==========================================================
 // PROCESSAR PAGAMENTO
-// ======================================================
-//
-// Essa é a rota usada pelo Payment Brick.
-//
+// ==========================================================
 
 app.post(
     "/process_payment",
@@ -484,42 +559,25 @@ app.post(
 
         try {
 
-            console.log("");
-            console.log(
-                "================================="
-            );
+            if (!paymentClient) {
 
-            console.log(
-                "💳 NOVO PAGAMENTO"
-            );
+                return res
+                    .status(500)
+                    .json({
 
-            console.log(
-                "================================="
-            );
+                        error:
+                            "Mercado Pago não configurado no servidor."
+
+                    });
+
+            }
+
 
             const {
-                cart,
-                formData
+                formData,
+                cart
             } = req.body;
 
-            // ==========================================
-            // CALCULA VALOR PELO SERVIDOR
-            // ==========================================
-
-            const pedido =
-                calcularCarrinho(cart);
-
-            const total =
-                pedido.total;
-
-            console.log(
-                "Total oficial:",
-                total
-            );
-
-            // ==========================================
-            // VALIDA FORM DATA
-            // ==========================================
 
             if (
                 !formData ||
@@ -531,54 +589,67 @@ app.post(
                     .json({
 
                         error:
-                            "Dados de pagamento não recebidos."
+                            "Dados do pagamento não recebidos."
 
                     });
 
             }
 
-            const paymentMethodId =
-                formData.payment_method_id;
-
-            if (!paymentMethodId) {
-
-                return res
-                    .status(400)
-                    .json({
-
-                        error:
-                            "Forma de pagamento não informada."
-
-                    });
-
-            }
 
             // ==========================================
-            // PAGADOR
+            // RECALCULA PREÇO NO SERVIDOR
             // ==========================================
 
-            const payer = {
-                ...(formData.payer || {})
+            const pedido =
+                calcularCarrinho(
+                    cart
+                );
+
+
+            console.log(
+                "💰 Total oficial:",
+                pedido.total
+            );
+
+
+            // ==========================================
+            // DADOS RECEBIDOS DO PAYMENT BRICK
+            // ==========================================
+
+            const paymentBody = {
+
+                ...formData,
+
+                transaction_amount:
+                    pedido.total
+
             };
 
-            if (!payer.email) {
 
-                return res
-                    .status(400)
-                    .json({
+            // Não confiamos no valor enviado pelo navegador.
+            paymentBody.transaction_amount =
+                pedido.total;
 
-                        error:
-                            "E-mail do comprador não informado."
 
-                    });
+            // Converte parcelas caso venha como texto.
+            if (
+                paymentBody.installments !==
+                undefined
+            ) {
+
+                paymentBody.installments =
+                    Number(
+                        paymentBody.installments
+                    );
 
             }
+
 
             // ==========================================
             // DESCRIÇÃO
             // ==========================================
 
-            const descricao =
+            paymentBody.description =
                 pedido.produtos
                     .map(
                         produto =>
@@ -587,85 +658,32 @@ app.post(
                     .join(", ")
                     .slice(0, 250);
 
-            // ==========================================
-            // BODY MERCADO PAGO
-            // ==========================================
-
-            const paymentBody = {
-
-                transaction_amount:
-                    total,
-
-                description:
-                    descricao,
-
-                payment_method_id:
-                    paymentMethodId,
-
-                payer:
-                    payer,
-
-                external_reference:
-                    `BLUEVAULT-${Date.now()}`,
-
-                notification_url:
-                    `${PUBLIC_URL}/webhook`
-
-            };
 
             // ==========================================
-            // CARTÃO
+            // EXTERNAL REFERENCE
             // ==========================================
 
-            if (formData.token) {
+            paymentBody.external_reference =
+                `BLUEVAULT-${Date.now()}`;
 
-                paymentBody.token =
-                    formData.token;
 
-            }
+            console.log(
+                "💳 Criando pagamento..."
+            );
 
-            if (formData.installments) {
-
-                paymentBody.installments =
-                    Number(
-                        formData.installments
-                    );
-
-            }
-
-            if (formData.issuer_id) {
-
-                paymentBody.issuer_id =
-                    String(
-                        formData.issuer_id
-                    );
-
-            }
 
             // ==========================================
-            // DADOS ADICIONAIS DO BRICK
-            // ==========================================
-
-            if (formData.additional_info) {
-
-                paymentBody.additional_info =
-                    formData.additional_info;
-
-            }
-
-            // ==========================================
-            // IDEMPOTÊNCIA
+            // IDEMPOTENCY KEY
+            // Evita pagamento duplicado em uma mesma
+            // tentativa/requisição.
             // ==========================================
 
             const idempotencyKey =
                 crypto.randomUUID();
 
-            // ==========================================
-            // CRIA PAGAMENTO
-            // ==========================================
 
-            const resultado =
-                await payment.create({
+            const payment =
+                await paymentClient.create({
 
                     body:
                         paymentBody,
@@ -679,83 +697,77 @@ app.post(
 
                 });
 
+
             console.log(
-                "✅ PAGAMENTO CRIADO"
+                "✅ Pagamento criado:",
+                payment.id
             );
 
             console.log(
-                "ID:",
-                resultado.id
+                "📌 Status:",
+                payment.status
             );
 
-            console.log(
-                "STATUS:",
-                resultado.status
-            );
-
-            console.log(
-                "MÉTODO:",
-                resultado.payment_method_id
-            );
 
             // ==========================================
             // PIX
             // ==========================================
 
             const transactionData =
-                resultado
-                    .point_of_interaction
+                payment
+                    ?.point_of_interaction
                     ?.transaction_data ||
                 {};
 
-            const qrCode =
-                transactionData.qr_code ||
-                null;
 
-            const qrCodeBase64 =
-                transactionData
-                    .qr_code_base64 ||
-                null;
+            // ==========================================
+            // BOLETO
+            // ==========================================
 
             const ticketUrl =
-                transactionData
-                    .ticket_url ||
-                resultado
-                    .transaction_details
+                payment
+                    ?.transaction_details
                     ?.external_resource_url ||
                 null;
 
+
             // ==========================================
-            // RESPOSTA PARA FRONTEND
+            // RESPOSTA PARA O SCRIPT.JS
             // ==========================================
 
             return res.json({
 
-                success: true,
+                success:
+                    true,
 
                 id:
-                    resultado.id,
+                    payment.id,
 
                 status:
-                    resultado.status,
+                    payment.status,
 
                 statusDetail:
-                    resultado.status_detail,
+                    payment.status_detail,
 
                 paymentMethodId:
-                    resultado.payment_method_id,
+                    payment.payment_method_id,
 
                 paymentTypeId:
-                    resultado.payment_type_id,
+                    payment.payment_type_id,
 
                 total:
-                    total,
+                    pedido.total,
+
+                externalReference:
+                    payment.external_reference,
 
                 qrCode:
-                    qrCode,
+                    transactionData.qr_code ||
+                    null,
 
                 qrCodeBase64:
-                    qrCodeBase64,
+                    transactionData.qr_code_base64 ||
+                    null,
 
                 ticketUrl:
                     ticketUrl
@@ -764,24 +776,30 @@ app.post(
 
         }
 
-        catch (erro) {
+        catch (error) {
 
-            console.error("");
             console.error(
-                "❌ ERRO AO PROCESSAR PAGAMENTO"
+                "=================================="
             );
 
             console.error(
-                erro
+                "❌ ERRO NO PAGAMENTO"
             );
 
-            const mensagem =
+            console.error(
+                error
+            );
 
-                erro?.message ||
+            console.error(
+                "=================================="
+            );
 
-                erro?.cause?.[0]?.description ||
 
+            const message =
+                error?.message ||
+                error?.cause?.[0]?.description ||
                 "Erro ao processar pagamento.";
+
 
             return res
                 .status(500)
@@ -791,7 +809,7 @@ app.post(
                         false,
 
                     error:
-                        mensagem
+                        message
 
                 });
 
@@ -800,192 +818,58 @@ app.post(
     }
 );
 
-// ======================================================
-// WEBHOOK
-// ======================================================
 
-app.post(
-    "/webhook",
-    (req, res) => {
-
-        // Mercado Pago deve receber resposta rapidamente.
-        res.sendStatus(200);
-
-        try {
-
-            console.log("");
-            console.log(
-                "================================="
-            );
-
-            console.log(
-                "🔔 WEBHOOK MERCADO PAGO"
-            );
-
-            console.log(
-                "================================="
-            );
-
-            console.log(
-                JSON.stringify(
-                    req.body,
-                    null,
-                    2
-                )
-            );
-
-            const paymentId =
-
-                req.body?.data?.id ||
-
-                req.query?.id ||
-
-                req.query?.["data.id"];
-
-            if (paymentId) {
-
-                console.log(
-                    "Pagamento:",
-                    paymentId
-                );
-
-            }
-
-        }
-
-        catch (erro) {
-
-            console.error(
-                "Erro webhook:",
-                erro
-            );
-
-        }
-
-    }
-);
-
-// ======================================================
-// TESTE WEBHOOK
-// ======================================================
+// ==========================================================
+// PÁGINA PRINCIPAL
+// ==========================================================
 
 app.get(
-    "/webhook",
+    "/",
     (req, res) => {
 
-        res.send(`
-<!DOCTYPE html>
-
-<html lang="pt-BR">
-
-<head>
-
-<meta charset="UTF-8">
-
-<meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
->
-
-<title>
-Webhook BlueVault
-</title>
-
-</head>
-
-<body
-style="
-margin:0;
-background:#030814;
-color:white;
-font-family:Arial;
-display:flex;
-justify-content:center;
-align-items:center;
-min-height:100vh;
-text-align:center;
-"
->
-
-<div>
-
-<h1 style="color:#18a8ff;">
-Webhook BlueVault
-</h1>
-
-<p>
-✅ Webhook funcionando.
-</p>
-
-<a
-href="/"
-style="
-color:#18a8ff;
-"
->
-Voltar para BlueVault
-</a>
-
-</div>
-
-</body>
-
-</html>
-        `);
+        res.sendFile(
+            path.join(
+                __dirname,
+                "index.html"
+            )
+        );
 
     }
 );
 
-// ======================================================
-// TESTE SERVIDOR
-// ======================================================
 
-app.get(
-    "/teste",
+// ==========================================================
+// 404 DAS ROTAS /API
+// ==========================================================
+
+app.use(
+    "/api",
     (req, res) => {
 
-        res.json({
+        res
+            .status(404)
+            .json({
 
-            servidor:
-                "online",
+                error:
+                    "Rota da API não encontrada."
 
-            loja:
-                "BlueVault Games",
-
-            mercadoPago:
-                "Payment Brick",
-
-            publicKey:
-                process.env
-                    .MERCADO_PAGO_PUBLIC_KEY
-                    ? "configurada"
-                    : "não configurada",
-
-            accessToken:
-                process.env
-                    .MERCADO_PAGO_ACCESS_TOKEN
-                    ? "configurado"
-                    : "não configurado",
-
-            webhook:
-                `${PUBLIC_URL}/webhook`
-
-        });
+            });
 
     }
 );
 
-// ======================================================
-// SERVIDOR
-// ======================================================
+
+// ==========================================================
+// INICIAR SERVIDOR
+// ==========================================================
 
 app.listen(
     PORT,
+    "0.0.0.0",
     () => {
 
-        console.log("");
         console.log(
-            "================================="
+            "=================================="
         );
 
         console.log(
@@ -993,27 +877,23 @@ app.listen(
         );
 
         console.log(
-            "================================="
+            `🚀 Servidor rodando na porta ${PORT}`
         );
 
         console.log(
-            `✅ Porta: ${PORT}`
+            ACCESS_TOKEN
+                ? "✅ Access Token configurado"
+                : "❌ Access Token NÃO configurado"
         );
 
         console.log(
-            `🌐 URL: ${PUBLIC_URL}`
+            PUBLIC_KEY
+                ? "✅ Public Key configurada"
+                : "❌ Public Key NÃO configurada"
         );
 
         console.log(
-            "💳 Payment Brick configurado"
-        );
-
-        console.log(
-            `🔔 Webhook: ${PUBLIC_URL}/webhook`
-        );
-
-        console.log(
-            "================================="
+            "=================================="
         );
 
     }
