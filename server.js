@@ -1,18 +1,19 @@
 const express = require("express");
 const dotenv = require("dotenv");
+const crypto = require("crypto");
 
 const {
     MercadoPagoConfig,
-    Preference
+    Payment
 } = require("mercadopago");
 
 dotenv.config();
 
 const app = express();
 
-// ========================================
+// ======================================================
 // CONFIGURAÇÕES
-// ========================================
+// ======================================================
 
 const PORT = process.env.PORT || 3000;
 
@@ -20,9 +21,9 @@ const PUBLIC_URL =
     process.env.RENDER_EXTERNAL_URL ||
     `http://localhost:${PORT}`;
 
-// ========================================
+// ======================================================
 // MIDDLEWARES
-// ========================================
+// ======================================================
 
 app.use(express.json());
 
@@ -30,51 +31,59 @@ app.use(express.urlencoded({
     extended: true
 }));
 
-// Permite acessar index.html, style.css,
-// script.js e a pasta assets
 app.use(express.static(__dirname));
 
-// ========================================
-// VERIFICA TOKEN DO MERCADO PAGO
-// ========================================
+// ======================================================
+// VERIFICA CREDENCIAIS
+// ======================================================
 
 if (!process.env.MERCADO_PAGO_ACCESS_TOKEN) {
-    console.error("");
-    console.error("❌ ERRO:");
-    console.error("Access Token do Mercado Pago não encontrado.");
-    console.error("");
+
     console.error(
-        "Configure MERCADO_PAGO_ACCESS_TOKEN no Render."
+        "❌ MERCADO_PAGO_ACCESS_TOKEN não configurado."
     );
-    console.error("");
 
     process.exit(1);
 }
 
-// ========================================
-// CONFIGURAÇÃO MERCADO PAGO
-// ========================================
+if (!process.env.MERCADO_PAGO_PUBLIC_KEY) {
+
+    console.error(
+        "❌ MERCADO_PAGO_PUBLIC_KEY não configurada."
+    );
+
+    process.exit(1);
+}
+
+// ======================================================
+// MERCADO PAGO
+// ======================================================
 
 const client = new MercadoPagoConfig({
-    accessToken: process.env.MERCADO_PAGO_ACCESS_TOKEN
+
+    accessToken:
+        process.env.MERCADO_PAGO_ACCESS_TOKEN,
+
+    options: {
+        timeout: 5000
+    }
+
 });
 
-const preference = new Preference(client);
+const payment = new Payment(client);
 
-// ========================================
+// ======================================================
 // CATÁLOGO OFICIAL BLUEVAULT
-// ========================================
+// ======================================================
 //
-// Estes são os preços OFICIAIS.
+// O preço REAL vem daqui.
 //
-// O servidor NÃO usa o preço enviado
-// pelo navegador.
-//
-// Isso impede alguém de alterar o preço
-// pelo DevTools.
+// NÃO usamos transaction_amount enviado
+// pelo navegador para determinar o valor.
 //
 
 const catalogo = {
+
     1: {
         title: "God of War",
         price: 29.99
@@ -314,550 +323,698 @@ const catalogo = {
         title: "Valheim",
         price: 19.99
     }
+
 };
 
-// ========================================
-// ROTA DE TESTE
-// ========================================
+// ======================================================
+// CALCULAR CARRINHO NO SERVIDOR
+// ======================================================
 
-app.get("/teste", (req, res) => {
-    res.json({
-        servidor: "online",
-        loja: "BlueVault Games",
-        mercadoPago: "configurado",
-        url: PUBLIC_URL,
-        webhook: `${PUBLIC_URL}/webhook`
-    });
-});
+function calcularCarrinho(cart) {
 
-// ========================================
-// CRIAR PAGAMENTO
-// ========================================
+    if (
+        !Array.isArray(cart) ||
+        cart.length === 0
+    ) {
 
-app.post("/criar-preferencia", async (req, res) => {
-    try {
-        console.log("");
-        console.log("=================================");
-        console.log("🛒 NOVO PEDIDO RECEBIDO");
-        console.log("=================================");
-
-        const { items } = req.body;
-
-        // ========================================
-        // VERIFICA CARRINHO
-        // ========================================
-
-        if (
-            !items ||
-            !Array.isArray(items) ||
-            items.length === 0
-        ) {
-            return res.status(400).json({
-                error: "Carrinho vazio."
-            });
-        }
-
-        // ========================================
-        // MONTA OS PRODUTOS
-        // ========================================
-
-        const produtos = items.map((item) => {
-            const produtoOficial = catalogo[item.id];
-
-            if (!produtoOficial) {
-                throw new Error(
-                    `Produto inválido: ${item.id}`
-                );
-            }
-
-            const quantidade = Number(item.qty);
-
-            if (
-                !Number.isInteger(quantidade) ||
-                quantidade <= 0 ||
-                quantidade > 20
-            ) {
-                throw new Error(
-                    `Quantidade inválida para o produto ${item.id}`
-                );
-            }
-
-            return {
-                id: String(item.id),
-                title: produtoOficial.title,
-                quantity: quantidade,
-                unit_price: produtoOficial.price,
-                currency_id: "BRL"
-            };
-        });
-
-        // ========================================
-        // CALCULA TOTAL
-        // ========================================
-
-        const total = produtos.reduce(
-            (soma, produto) => {
-                return (
-                    soma +
-                    produto.unit_price *
-                    produto.quantity
-                );
-            },
-            0
+        throw new Error(
+            "Carrinho vazio."
         );
-
-        console.log("Produtos:");
-        console.log(produtos);
-
-        console.log(
-            `💰 Total: R$ ${total.toFixed(2)}`
-        );
-
-        // ========================================
-        // CRIA CHECKOUT MERCADO PAGO
-        // ========================================
-
-        const resultado = await preference.create({
-            body: {
-                items: produtos,
-
-                back_urls: {
-                    success:
-                        `${PUBLIC_URL}/pagamento-sucesso`,
-
-                    failure:
-                        `${PUBLIC_URL}/pagamento-erro`,
-
-                    pending:
-                        `${PUBLIC_URL}/pagamento-pendente`
-                },
-
-                auto_return: "approved",
-
-                notification_url:
-                    `${PUBLIC_URL}/webhook`,
-
-                statement_descriptor:
-                    "BLUEVAULT"
-            }
-        });
-
-        console.log("");
-        console.log("✅ PAGAMENTO CRIADO");
-        console.log("Preference ID:", resultado.id);
-        console.log(
-            `💰 Valor: R$ ${total.toFixed(2)}`
-        );
-
-        // ========================================
-        // RETORNA CHECKOUT PARA O SITE
-        // ========================================
-
-        return res.json({
-            preferenceId: resultado.id,
-
-            initPoint:
-                resultado.init_point,
-
-            sandboxInitPoint:
-                resultado.sandbox_init_point,
-
-            total:
-                Number(total.toFixed(2))
-        });
-
-    } catch (erro) {
-        console.error("");
-        console.error("❌ ERRO MERCADO PAGO:");
-        console.error(erro);
-
-        return res.status(500).json({
-            error: "Erro ao criar pagamento.",
-            details: erro.message
-        });
     }
-});
 
-// ========================================
-// WEBHOOK MERCADO PAGO
-// ========================================
+    const produtos = [];
 
-app.post("/webhook", async (req, res) => {
-    // Responde rapidamente ao Mercado Pago
-    res.sendStatus(200);
+    let total = 0;
 
-    try {
-        console.log("");
-        console.log("=================================");
-        console.log("🔔 WEBHOOK MERCADO PAGO");
-        console.log("=================================");
+    for (const item of cart) {
 
-        console.log("BODY:");
-        console.log(
-            JSON.stringify(req.body, null, 2)
-        );
+        const produto =
+            catalogo[Number(item.id)];
 
-        console.log("QUERY:");
-        console.log(req.query);
+        if (!produto) {
 
-        console.log("X-SIGNATURE:");
-        console.log(
-            req.headers["x-signature"] ||
-            "não enviado"
-        );
-
-        console.log("X-REQUEST-ID:");
-        console.log(
-            req.headers["x-request-id"] ||
-            "não enviado"
-        );
-
-        const paymentId =
-            req.body?.data?.id ||
-            req.query?.id ||
-            req.query?.["data.id"];
-
-        if (paymentId) {
-            console.log(
-                "💳 ID DO PAGAMENTO:",
-                paymentId
+            throw new Error(
+                `Produto inválido: ${item.id}`
             );
         }
 
-        console.log("=================================");
-        console.log("");
+        const quantidade =
+            Number(item.qty);
 
-    } catch (erro) {
-        console.error(
-            "❌ Erro no webhook:",
-            erro
-        );
+        if (
+            !Number.isInteger(quantidade) ||
+            quantidade < 1 ||
+            quantidade > 20
+        ) {
+
+            throw new Error(
+                `Quantidade inválida: ${item.id}`
+            );
+        }
+
+        const subtotal =
+            produto.price *
+            quantidade;
+
+        total += subtotal;
+
+        produtos.push({
+
+            id: Number(item.id),
+
+            title:
+                produto.title,
+
+            price:
+                produto.price,
+
+            qty:
+                quantidade,
+
+            subtotal:
+                Number(
+                    subtotal.toFixed(2)
+                )
+
+        });
+
     }
-});
 
-// ========================================
-// TESTE DO WEBHOOK
-// ========================================
+    return {
 
-app.get("/webhook", (req, res) => {
-    res.send(`
-<!DOCTYPE html>
-<html lang="pt-BR">
+        produtos,
 
-<head>
-    <meta charset="UTF-8">
+        total:
+            Number(
+                total.toFixed(2)
+            )
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    };
 
-    <title>Webhook BlueVault</title>
-</head>
+}
 
-<body style="
-    margin:0;
-    background:#030814;
-    color:white;
-    font-family:Arial;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    min-height:100vh;
-    text-align:center;
-">
+// ======================================================
+// PUBLIC KEY
+// ======================================================
+//
+// O navegador pode conhecer a Public Key.
+// O Access Token NUNCA é enviado.
+//
 
-    <div>
-        <h1 style="color:#18a8ff;">
-            Webhook BlueVault
-        </h1>
+app.get(
+    "/api/mercadopago/public-key",
+    (req, res) => {
 
-        <p>
-            ✅ A rota /webhook está funcionando.
-        </p>
+        res.json({
 
-        <p>
-            O Mercado Pago pode enviar
-            notificações para esta URL.
-        </p>
+            publicKey:
+                process.env
+                    .MERCADO_PAGO_PUBLIC_KEY
 
-        <a
-            href="/"
-            style="
-                color:#18a8ff;
-                text-decoration:none;
-            "
-        >
-            Voltar para BlueVault
-        </a>
-    </div>
+        });
 
-</body>
-</html>
-    `);
-});
+    }
+);
 
-// ========================================
-// PAGAMENTO APROVADO
-// ========================================
+// ======================================================
+// CONSULTAR TOTAL REAL
+// ======================================================
 
-app.get("/pagamento-sucesso", (req, res) => {
-    console.log("");
-    console.log("✅ PAGAMENTO APROVADO");
-    console.log(req.query);
+app.post(
+    "/api/carrinho",
+    (req, res) => {
 
-    res.send(`
-<!DOCTYPE html>
-<html lang="pt-BR">
+        try {
 
-<head>
-    <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>Pagamento aprovado</title>
-</head>
-
-<body style="
-    margin:0;
-    background:linear-gradient(
-        135deg,
-        #020711,
-        #071b30
-    );
-    color:white;
-    font-family:Arial,sans-serif;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    min-height:100vh;
-    text-align:center;
-">
-
-    <div>
-
-        <div style="
-            font-size:70px;
-            margin-bottom:20px;
-        ">
-            ✅
-        </div>
-
-        <h1 style="
-            color:#18a8ff;
-            font-size:40px;
-        ">
-            Pagamento aprovado!
-        </h1>
-
-        <p style="
-            color:#9bb4cc;
-            font-size:17px;
-        ">
-            Sua compra foi recebida com sucesso.
-        </p>
-
-        <a
-            href="/"
-            style="
-                display:inline-block;
-                margin-top:25px;
-                padding:15px 30px;
-                background:linear-gradient(
-                    135deg,
-                    #18a8ff,
-                    #0068ff
+            const resultado =
+                calcularCarrinho(
+                    req.body.cart
                 );
-                color:white;
-                text-decoration:none;
-                border-radius:12px;
-                font-weight:bold;
-            "
-        >
-            Voltar para BlueVault
-        </a>
 
-    </div>
+            res.json(resultado);
 
-</body>
-</html>
-    `);
-});
+        }
 
-// ========================================
-// PAGAMENTO PENDENTE
-// ========================================
+        catch (erro) {
 
-app.get("/pagamento-pendente", (req, res) => {
-    console.log("");
-    console.log("⏳ PAGAMENTO PENDENTE");
-    console.log(req.query);
+            res
+                .status(400)
+                .json({
 
-    res.send(`
+                    error:
+                        erro.message
+
+                });
+
+        }
+
+    }
+);
+
+// ======================================================
+// PROCESSAR PAGAMENTO
+// ======================================================
+//
+// Essa é a rota usada pelo Payment Brick.
+//
+
+app.post(
+    "/process_payment",
+    async (req, res) => {
+
+        try {
+
+            console.log("");
+            console.log(
+                "================================="
+            );
+
+            console.log(
+                "💳 NOVO PAGAMENTO"
+            );
+
+            console.log(
+                "================================="
+            );
+
+            const {
+                cart,
+                formData
+            } = req.body;
+
+            // ==========================================
+            // CALCULA VALOR PELO SERVIDOR
+            // ==========================================
+
+            const pedido =
+                calcularCarrinho(cart);
+
+            const total =
+                pedido.total;
+
+            console.log(
+                "Total oficial:",
+                total
+            );
+
+            // ==========================================
+            // VALIDA FORM DATA
+            // ==========================================
+
+            if (
+                !formData ||
+                typeof formData !== "object"
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+
+                        error:
+                            "Dados de pagamento não recebidos."
+
+                    });
+
+            }
+
+            const paymentMethodId =
+                formData.payment_method_id;
+
+            if (!paymentMethodId) {
+
+                return res
+                    .status(400)
+                    .json({
+
+                        error:
+                            "Forma de pagamento não informada."
+
+                    });
+
+            }
+
+            // ==========================================
+            // PAGADOR
+            // ==========================================
+
+            const payer = {
+                ...(formData.payer || {})
+            };
+
+            if (!payer.email) {
+
+                return res
+                    .status(400)
+                    .json({
+
+                        error:
+                            "E-mail do comprador não informado."
+
+                    });
+
+            }
+
+            // ==========================================
+            // DESCRIÇÃO
+            // ==========================================
+
+            const descricao =
+                pedido.produtos
+                    .map(
+                        produto =>
+                            `${produto.qty}x ${produto.title}`
+                    )
+                    .join(", ")
+                    .slice(0, 250);
+
+            // ==========================================
+            // BODY MERCADO PAGO
+            // ==========================================
+
+            const paymentBody = {
+
+                transaction_amount:
+                    total,
+
+                description:
+                    descricao,
+
+                payment_method_id:
+                    paymentMethodId,
+
+                payer:
+                    payer,
+
+                external_reference:
+                    `BLUEVAULT-${Date.now()}`,
+
+                notification_url:
+                    `${PUBLIC_URL}/webhook`
+
+            };
+
+            // ==========================================
+            // CARTÃO
+            // ==========================================
+
+            if (formData.token) {
+
+                paymentBody.token =
+                    formData.token;
+
+            }
+
+            if (formData.installments) {
+
+                paymentBody.installments =
+                    Number(
+                        formData.installments
+                    );
+
+            }
+
+            if (formData.issuer_id) {
+
+                paymentBody.issuer_id =
+                    String(
+                        formData.issuer_id
+                    );
+
+            }
+
+            // ==========================================
+            // DADOS ADICIONAIS DO BRICK
+            // ==========================================
+
+            if (formData.additional_info) {
+
+                paymentBody.additional_info =
+                    formData.additional_info;
+
+            }
+
+            // ==========================================
+            // IDEMPOTÊNCIA
+            // ==========================================
+
+            const idempotencyKey =
+                crypto.randomUUID();
+
+            // ==========================================
+            // CRIA PAGAMENTO
+            // ==========================================
+
+            const resultado =
+                await payment.create({
+
+                    body:
+                        paymentBody,
+
+                    requestOptions: {
+
+                        idempotencyKey:
+                            idempotencyKey
+
+                    }
+
+                });
+
+            console.log(
+                "✅ PAGAMENTO CRIADO"
+            );
+
+            console.log(
+                "ID:",
+                resultado.id
+            );
+
+            console.log(
+                "STATUS:",
+                resultado.status
+            );
+
+            console.log(
+                "MÉTODO:",
+                resultado.payment_method_id
+            );
+
+            // ==========================================
+            // PIX
+            // ==========================================
+
+            const transactionData =
+                resultado
+                    .point_of_interaction
+                    ?.transaction_data ||
+                {};
+
+            const qrCode =
+                transactionData.qr_code ||
+                null;
+
+            const qrCodeBase64 =
+                transactionData
+                    .qr_code_base64 ||
+                null;
+
+            const ticketUrl =
+                transactionData
+                    .ticket_url ||
+                resultado
+                    .transaction_details
+                    ?.external_resource_url ||
+                null;
+
+            // ==========================================
+            // RESPOSTA PARA FRONTEND
+            // ==========================================
+
+            return res.json({
+
+                success: true,
+
+                id:
+                    resultado.id,
+
+                status:
+                    resultado.status,
+
+                statusDetail:
+                    resultado.status_detail,
+
+                paymentMethodId:
+                    resultado.payment_method_id,
+
+                paymentTypeId:
+                    resultado.payment_type_id,
+
+                total:
+                    total,
+
+                qrCode:
+                    qrCode,
+
+                qrCodeBase64:
+                    qrCodeBase64,
+
+                ticketUrl:
+                    ticketUrl
+
+            });
+
+        }
+
+        catch (erro) {
+
+            console.error("");
+            console.error(
+                "❌ ERRO AO PROCESSAR PAGAMENTO"
+            );
+
+            console.error(
+                erro
+            );
+
+            const mensagem =
+
+                erro?.message ||
+
+                erro?.cause?.[0]?.description ||
+
+                "Erro ao processar pagamento.";
+
+            return res
+                .status(500)
+                .json({
+
+                    success:
+                        false,
+
+                    error:
+                        mensagem
+
+                });
+
+        }
+
+    }
+);
+
+// ======================================================
+// WEBHOOK
+// ======================================================
+
+app.post(
+    "/webhook",
+    (req, res) => {
+
+        // Mercado Pago deve receber resposta rapidamente.
+        res.sendStatus(200);
+
+        try {
+
+            console.log("");
+            console.log(
+                "================================="
+            );
+
+            console.log(
+                "🔔 WEBHOOK MERCADO PAGO"
+            );
+
+            console.log(
+                "================================="
+            );
+
+            console.log(
+                JSON.stringify(
+                    req.body,
+                    null,
+                    2
+                )
+            );
+
+            const paymentId =
+
+                req.body?.data?.id ||
+
+                req.query?.id ||
+
+                req.query?.["data.id"];
+
+            if (paymentId) {
+
+                console.log(
+                    "Pagamento:",
+                    paymentId
+                );
+
+            }
+
+        }
+
+        catch (erro) {
+
+            console.error(
+                "Erro webhook:",
+                erro
+            );
+
+        }
+
+    }
+);
+
+// ======================================================
+// TESTE WEBHOOK
+// ======================================================
+
+app.get(
+    "/webhook",
+    (req, res) => {
+
+        res.send(`
 <!DOCTYPE html>
+
 <html lang="pt-BR">
 
 <head>
-    <meta charset="UTF-8">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+<meta charset="UTF-8">
 
-    <title>Pagamento pendente</title>
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>
+Webhook BlueVault
+</title>
+
 </head>
 
-<body style="
-    margin:0;
-    background:#030814;
-    color:white;
-    font-family:Arial;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    min-height:100vh;
-    text-align:center;
-">
+<body
+style="
+margin:0;
+background:#030814;
+color:white;
+font-family:Arial;
+display:flex;
+justify-content:center;
+align-items:center;
+min-height:100vh;
+text-align:center;
+"
+>
 
-    <div>
+<div>
 
-        <div style="font-size:70px;">
-            ⏳
-        </div>
+<h1 style="color:#18a8ff;">
+Webhook BlueVault
+</h1>
 
-        <h1 style="color:#ffd84d;">
-            Pagamento pendente
-        </h1>
+<p>
+✅ Webhook funcionando.
+</p>
 
-        <p style="color:#9bb4cc;">
-            Estamos aguardando a confirmação
-            do pagamento.
-        </p>
+<a
+href="/"
+style="
+color:#18a8ff;
+"
+>
+Voltar para BlueVault
+</a>
 
-        <a
-            href="/"
-            style="
-                display:inline-block;
-                margin-top:20px;
-                padding:15px 25px;
-                background:#18a8ff;
-                color:white;
-                text-decoration:none;
-                border-radius:10px;
-            "
-        >
-            Voltar para a loja
-        </a>
-
-    </div>
+</div>
 
 </body>
+
 </html>
-    `);
-});
+        `);
 
-// ========================================
-// PAGAMENTO NÃO CONCLUÍDO
-// ========================================
+    }
+);
 
-app.get("/pagamento-erro", (req, res) => {
-    console.log("");
-    console.log("❌ PAGAMENTO NÃO CONCLUÍDO");
-    console.log(req.query);
+// ======================================================
+// TESTE SERVIDOR
+// ======================================================
 
-    res.send(`
-<!DOCTYPE html>
-<html lang="pt-BR">
+app.get(
+    "/teste",
+    (req, res) => {
 
-<head>
-    <meta charset="UTF-8">
+        res.json({
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+            servidor:
+                "online",
 
-    <title>Pagamento não concluído</title>
-</head>
+            loja:
+                "BlueVault Games",
 
-<body style="
-    margin:0;
-    background:#030814;
-    color:white;
-    font-family:Arial;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    min-height:100vh;
-    text-align:center;
-">
+            mercadoPago:
+                "Payment Brick",
 
-    <div>
+            publicKey:
+                process.env
+                    .MERCADO_PAGO_PUBLIC_KEY
+                    ? "configurada"
+                    : "não configurada",
 
-        <div style="font-size:70px;">
-            ❌
-        </div>
+            accessToken:
+                process.env
+                    .MERCADO_PAGO_ACCESS_TOKEN
+                    ? "configurado"
+                    : "não configurado",
 
-        <h1 style="color:#ff4c6a;">
-            Pagamento não concluído
-        </h1>
+            webhook:
+                `${PUBLIC_URL}/webhook`
 
-        <p style="color:#9bb4cc;">
-            Tente novamente ou escolha
-            outra forma de pagamento.
-        </p>
+        });
 
-        <a
-            href="/"
-            style="
-                display:inline-block;
-                margin-top:20px;
-                padding:15px 25px;
-                background:#18a8ff;
-                color:white;
-                text-decoration:none;
-                border-radius:10px;
-            "
-        >
-            Voltar para a loja
-        </a>
+    }
+);
 
-    </div>
+// ======================================================
+// SERVIDOR
+// ======================================================
 
-</body>
-</html>
-    `);
-});
+app.listen(
+    PORT,
+    () => {
 
-// ========================================
-// INICIA SERVIDOR
-// ========================================
+        console.log("");
+        console.log(
+            "================================="
+        );
 
-app.listen(PORT, () => {
-    console.log("");
-    console.log("=================================");
-    console.log("🎮 BLUEVAULT GAMES");
-    console.log("=================================");
-    console.log("");
+        console.log(
+            "🎮 BLUEVAULT GAMES"
+        );
 
-    console.log("✅ Servidor iniciado");
-    console.log(`📡 Porta: ${PORT}`);
+        console.log(
+            "================================="
+        );
 
-    console.log("");
-    console.log("🌐 URL:");
-    console.log(PUBLIC_URL);
+        console.log(
+            `✅ Porta: ${PORT}`
+        );
 
-    console.log("");
-    console.log("🔔 Webhook:");
-    console.log(`${PUBLIC_URL}/webhook`);
+        console.log(
+            `🌐 URL: ${PUBLIC_URL}`
+        );
 
-    console.log("");
-    console.log("💳 Mercado Pago configurado");
+        console.log(
+            "💳 Payment Brick configurado"
+        );
 
-    console.log("");
-    console.log("=================================");
-});
+        console.log(
+            `🔔 Webhook: ${PUBLIC_URL}/webhook`
+        );
+
+        console.log(
+            "================================="
+        );
+
+    }
+);
